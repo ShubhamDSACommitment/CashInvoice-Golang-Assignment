@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: task_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: taskdb
+      MYSQL_USER: taskuser
+      MYSQL_PASSWORD: taskpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: task_api
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - path: .env
+    ports:
+      - "8082:8080"
+    command: ["./server"]
+
+volumes:
+  mysql_data:
