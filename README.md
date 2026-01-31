@@ -29,14 +29,14 @@ This project is fully containerized using **Docker Compose**, so you can run eve
 ## 🏗 Architecture Overview
 ```mermaid
 flowchart TD
-    C[Client<br/>(Postman / Curl)]
-    R[Gin Router]
-    M[JWT Middleware]
-    H[Handlers<br/>(HTTP Layer)]
-    S[Services<br/>(Business Logic)]
-    REPO[Repositories<br/>(MySQL)]
+    C["Client (Postman / Curl)"]
+    R["Gin Router"]
+    M["JWT Middleware"]
+    H["Handlers (HTTP Layer)"]
+    S["Services (Business Logic)"]
+    REPO["Repositories (MySQL)"]
     DB[(Database)]
-    W[Background Worker<br/>(Goroutines + Channel Queue)]
+    W["Background Worker (Goroutines + Channel Queue)"]
 
     C --> R
     R --> M
