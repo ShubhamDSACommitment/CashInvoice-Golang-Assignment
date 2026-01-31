@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"log"
 
 	"github.com/CashInvoice-Golang-Assignment/internal/models"
 	"github.com/CashInvoice-Golang-Assignment/internal/repository"
@@ -21,12 +22,13 @@ func (s *TaskService) CreateTask(task *models.Task) error {
 		return err
 	}
 
-	//// Send task ID to background worker (non-blocking if buffered channel)
-	//select {
-	//case s.queue <- task.ID:
-	//default:
-	//	// Queue full, skip auto-complete to avoid blocking API
-	//}
+	// Non-blocking send
+	select {
+	case s.queue <- task.ID:
+	default:
+		// Queue full — log and move on
+		log.Println("Auto-complete queue full, skipping task:", task.ID)
+	}
 
 	return nil
 }
@@ -38,4 +40,32 @@ func (s *TaskService) GetAllTasks(userID string, role string) ([]models.Task, er
 	isAdmin := role == "admin"
 
 	return s.repo.GetAll(userID, isAdmin)
+}
+
+func (s *TaskService) GetTaskByID(taskID, userID, role string) (*models.Task, error) {
+	task, err := s.repo.GetByID(taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Authorization: user can only access own task
+	if role != "admin" && task.UserID != userID {
+		return nil, errors.New("forbidden")
+	}
+
+	return task, nil
+}
+
+func (s *TaskService) DeleteTask(taskID, userID, role string) error {
+	task, err := s.repo.GetByID(taskID)
+	if err != nil {
+		return err
+	}
+
+	// Authorization: user can only delete own task
+	if role != "admin" && task.UserID != userID {
+		return errors.New("forbidden")
+	}
+
+	return s.repo.Delete(taskID)
 }

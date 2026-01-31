@@ -1,54 +1,61 @@
 package main
 
 import (
+	"os"
+	"time"
+
+	"github.com/CashInvoice-Golang-Assignment/internal/config"
 	"github.com/CashInvoice-Golang-Assignment/internal/handler"
+	"github.com/CashInvoice-Golang-Assignment/internal/middleware"
 	"github.com/CashInvoice-Golang-Assignment/internal/repository"
 	"github.com/CashInvoice-Golang-Assignment/internal/service"
+	"github.com/CashInvoice-Golang-Assignment/internal/worker"
 	"github.com/CashInvoice-Golang-Assignment/pkg/database"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	//
-	//db := database.Connect(cfg.DBUrl)
-	//
-	//queue := make(chan string, 100)
-	//
-	//taskRepo := repository.NewPostgresTaskRepo(db)
-	//taskService := service.NewTaskService(taskRepo, queue)
-	//
-	//worker.StartAutoCompleteWorker(
-	//	taskRepo,
-	//	queue,
-	//	time.Duration(cfg.AutoCompleteMinutes)*time.Minute,
-	//)
-	db := database.Connect()
+	cfg := config.Load()
+	db := database.Connect(cfg)
 	database.RunMigrations(db)
 
-	// ---------------- Channel (Worker Queue) ----------------
 	taskQueue := make(chan string, 100)
 
-	// ---------------- Dependency Injection ----------------
 	taskRepo := repository.NewMySQLTaskRepository(db)
 	taskService := service.NewTaskService(taskRepo, taskQueue)
 	taskHandler := handler.NewTaskHandler(taskService)
+	userRepo := repository.NewMySQLUserRepository(db)
+	authService := service.NewAuthService(userRepo)
+	authHandler := handler.NewAuthHandler(
+		authService,
+		os.Getenv("JWT_SECRET"),
+		10,
+	)
+	// Public
+	delay := time.Duration(cfg.AutoCompleteMinutes) * time.Minute
+	worker := worker.NewAutoCompleteWorker(taskRepo, taskQueue, delay)
+	worker.Start(4)
+
 	r := gin.Default()
 
-	//auth := r.Group("/auth")
-	//auth.POST("/login", handler.Login)
-	//
+	// Public
+	auth := r.Group("/auth")
+	auth.POST("/login", authHandler.Login)
+	auth.POST("/register", authHandler.Register)
+
+	// Protected
 	tasks := r.Group("/tasks")
-	//tasks.Use(middleware.JWTMiddleware(cfg.JWTSecret))
-
+	tasks.Use(middleware.JWTMiddleware(cfg.JWTSecret))
 	tasks.POST("", taskHandler.Create)
-	tasks.GET("", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "Hello World",
-		})
-	})
+	tasks.GET("", taskHandler.GetAllTask)
+	tasks.GET("/:id", taskHandler.GetByID)
+	tasks.DELETE("/:id", taskHandler.Delete)
 
-	//tasks.GET(":id", taskHandler.GetByID)
-	//tasks.DELETE(":id", taskHandler.Delete)
+	// Admin-only group
+	admin := auth.Group("/admin")
+	admin.Use(middleware.JWTMiddleware(cfg.JWTSecret))
+	admin.Use(middleware.AdminOnly()) // we’ll create this
+	admin.POST("/register", authHandler.RegisterAdmin)
 
 	r.Run(":8080")
 }

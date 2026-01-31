@@ -8,4 +8,5 @@ type TaskRepository interface {
 	GetAll(userID string, isAdmin bool) ([]models.Task, error)
 	Delete(id string) error
 	UpdateStatus(id string, status string) error
+	AutoCompleteIfPending(id string) error
 }

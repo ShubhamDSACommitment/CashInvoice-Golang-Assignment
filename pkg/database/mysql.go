@@ -4,27 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 
+	"github.com/CashInvoice-Golang-Assignment/internal/config"
 	_ "github.com/go-sql-driver/mysql"
 )
 
-func Connect() *sql.DB {
-	//er := godotenv.Load()
-	//if er != nil {
-	//	log.Fatalf("err loading: %v", er)
-	//}
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	pass := os.Getenv("DB_PASSWORD")
-	name := os.Getenv("DB_NAME")
+func Connect(cfg *config.Config) *sql.DB {
+
+	host := cfg.DBHost
+	port := cfg.DBPort
+	user := cfg.DBUser
+	pass := cfg.DBPass
+	name := cfg.DBName
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, pass, host, port, name)
-	//
-	//dsn := fmt.Sprintf(
-	//	"%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=UTC&allowPublicKeyRetrieval=true&tls=false",
-	//	user, pass, host, port, name,
-	//)
+
 	log.Println("Connecting to database...", dsn)
 	var db *sql.DB
 	var err error
