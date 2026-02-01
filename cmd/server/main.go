@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/CashInvoice-Golang-Assignment/internal/config"
@@ -15,11 +21,14 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	cfg := config.Load()
 	db := database.Connect(cfg)
 	database.RunMigrations(db)
 
 	taskQueue := make(chan string, 100)
+	wg := &sync.WaitGroup{}
 
 	taskRepo := repository.NewMySQLTaskRepository(db)
 	taskService := service.NewTaskService(taskRepo, taskQueue)
@@ -33,8 +42,8 @@ func main() {
 	)
 	// Public
 	delay := time.Duration(cfg.AutoCompleteMinutes) * time.Minute
-	worker := worker.NewAutoCompleteWorker(taskRepo, taskQueue, delay)
-	worker.Start(4)
+	worker := worker.NewAutoCompleteWorker(taskRepo, taskQueue, delay, wg)
+	worker.Start(ctx, 4)
 
 	r := gin.Default()
 
@@ -57,5 +66,42 @@ func main() {
 	admin.Use(middleware.AdminOnly()) // we’ll create this
 	admin.POST("/register", authHandler.RegisterAdmin)
 
-	r.Run(":8080")
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+
+	go func() {
+		log.Println("Server running on :8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutdown signal received")
+
+	// Stop accepting new requests
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Println("Server shutdown error:", err)
+	}
+
+	cancel()
+	close(taskQueue)
+
+	wg.Wait()
+
+	// Close DB
+	err := db.Close()
+	if err != nil {
+		log.Println("ERROR CLOSING DB ", err)
+	}
+
+	log.Println("Graceful shutdown complete")
+
 }

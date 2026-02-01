@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"log"
+	"time"
 
 	"github.com/CashInvoice-Golang-Assignment/internal/models"
 	"github.com/CashInvoice-Golang-Assignment/internal/repository"
@@ -25,13 +26,13 @@ func (s *TaskService) CreateTask(task *models.Task) error {
 	// Non-blocking send
 	select {
 	case s.queue <- task.ID:
-	default:
-		// Queue full — log and move on
-		log.Println("Auto-complete queue full, skipping task:", task.ID)
+		// enqueued
+	case <-time.After(500 * time.Millisecond):
+		log.Println("Auto-complete queue timeout, skipping:", task.ID)
 	}
-
 	return nil
 }
+
 func (s *TaskService) GetAllTasks(userID string, role string) ([]models.Task, error) {
 	if userID == "" {
 		return nil, errors.New("unauthorized")
